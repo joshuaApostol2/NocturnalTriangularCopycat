@@ -52,7 +52,7 @@ const rateLimiter = (req, res, next) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     if (isBannedIP(ip)) {
-        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+        return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
     }
 
     const now = Date.now();
@@ -73,7 +73,7 @@ const rateLimiter = (req, res, next) => {
         if (count > MAX_REQUESTS) {
             blocklist.add(ip);
             blockIPCloudflare(ip);
-            return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+            return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
         }
 
         requestCounts.set(ip, count);
@@ -89,7 +89,7 @@ const additionalSecurityChecks = (req, res, next) => {
     if (userAgent && userAgent.includes('BadBot')) {
         blocklist.add(ip);
         blockIPCloudflare(ip);
-        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+        return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
     }
 
     next();
@@ -128,7 +128,7 @@ app.use(enforceStrictSecurity);
 app.use(additionalSecurityChecks);
 
 app.get('/', (req, res) => {
-    res.send('Hina ng DDoS mo, bata HAHAHAHA');
+    res.send('hina ng DDoS mo bata HAHAHAHA');
 });
 
 app.use((req, res) => {
