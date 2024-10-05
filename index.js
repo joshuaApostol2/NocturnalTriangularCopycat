@@ -4,10 +4,10 @@ const helmet = require('helmet');
 const app = express();
 const port = 3000;
 
-const blocklist = new Set();
 const CLOUDFLARE_API_KEY = 'jR_QLJkhgWLtCJsMRFHUtnMIoQzSO4PNyJ_AwiWZ';
 const CLOUDFLARE_ZONE_ID = '4de7cfa4c579eba6a1bc257bf61b9c6e';
-const RECAPTCHA_SECRET_KEY = '6Lf8qlgqAAAAAE61r0lUtXaC1zDbF_c5ntud8pet';
+
+const blocklist = new Set();
 const MAX_REQUESTS = 15;
 const TIME_WINDOW = 60 * 1000;
 
@@ -52,7 +52,7 @@ const rateLimiter = (req, res, next) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     if (isBannedIP(ip)) {
-        return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
+        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
     }
 
     const now = Date.now();
@@ -71,7 +71,9 @@ const rateLimiter = (req, res, next) => {
         const count = requestCounts.get(ip) + 1;
 
         if (count > MAX_REQUESTS) {
-            return res.status(429).send('please complete CAPTCHA');
+            blocklist.add(ip);
+            blockIPCloudflare(ip);
+            return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
         }
 
         requestCounts.set(ip, count);
@@ -80,44 +82,53 @@ const rateLimiter = (req, res, next) => {
     next();
 };
 
-const verifyRecaptcha = async (token) => {
-    try {
-        const response = await axios.post(`https://www.google.com/recaptcha/api/siteverify`, null, {
-            params: {
-                secret: RECAPTCHA_SECRET_KEY,
-                response: token,
-            },
-        });
-        return response.data.success;
-    } catch {
+const additionalSecurityChecks = (req, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    const userAgent = req.headers['user-agent'];
+
+    if (userAgent && userAgent.includes('BadBot')) {
+        blocklist.add(ip);
+        blockIPCloudflare(ip);
+        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+    }
+
+    next();
+};
+
+// Advanced Security Features
+const trackRequest = (ip) => {
+    const now = Date.now();
+    const count = requestCounts.get(ip) || 0;
+
+    if (count >= MAX_REQUESTS) {
         return false;
     }
+
+    requestCounts.set(ip, count + 1);
+    requestTimestamps.set(ip, now);
+    return true;
+};
+
+const enforceStrictSecurity = (req, res, next) => {
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+
+    if (!trackRequest(ip)) {
+        blocklist.add(ip);
+        blockIPCloudflare(ip);
+        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+    }
+
+    next();
 };
 
 app.use(helmet());
 app.use(express.json());
-
 app.use(rateLimiter);
-
-app.post('/submit', async (req, res) => {
-    const { token } = req.body;
-
-    const isHuman = await verifyRecaptcha(token);
-    if (!isHuman) {
-        return res.status(403).send('CAPTCHA verification failed');
-    }
-
-    res.send('hina ng DDoS mo, bata HAHAHAHA');
-});
+app.use(enforceStrictSecurity);
+app.use(additionalSecurityChecks);
 
 app.get('/', (req, res) => {
-    res.send(`
-        <form action="/submit" method="post">
-            <input type="hidden" id="g-recaptcha-response" name="token" value="">
-            <button type="submit">Submit</button>
-        </form>
-        <script src="https://www.google.com/recaptcha/api.js" async defer></script>
-    `);
+    res.send('Hina ng DDoS mo, bata HAHAHAHA');
 });
 
 app.use((req, res) => {
