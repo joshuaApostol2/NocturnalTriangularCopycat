@@ -1,13 +1,17 @@
 const express = require('express');
 const axios = require('axios');
+const helmet = require('helmet');
 const app = express();
 const port = 3000;
 
 let blocklist = {};
 const BLOCK_TIME = 15 * 60 * 1000;
 const API_KEY = 'ea598429a1ea4d589669de66faa9db2c';
-const MAX_REQUESTS = 100;
+const CLOUDFLARE_API_KEY = 'jR_QLJkhgWLtCJsMRFHUtnMIoQzSO4PNyJ_AwiWZ';
+const CLOUDFLARE_ZONE_ID = '4de7cfa4c579eba6a1bc257bf61b9c6e';
 const IP_REQUEST_COUNT = {};
+const MAX_REQUESTS = 100;
+let isCloudflareTokenValid = false;
 
 const checkIPReputation = async (ip) => {
     try {
@@ -18,71 +22,98 @@ const checkIPReputation = async (ip) => {
     }
 };
 
+const blockIPCloudflare = async (ip) => {
+    try {
+        await axios.post(`https://api.cloudflare.com/client/v4/zones/${CLOUDFLARE_ZONE_ID}/firewall/access/rules`, {
+            mode: 'block',
+            configuration: {
+                target: 'ip',
+                value: ip
+            },
+            notes: 'Blocking malicious IP'
+        }, {
+            headers: {
+                'Authorization': `Bearer ${CLOUDFLARE_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
+    } catch (error) {
+        console.error(`Error blocking IP ${ip} on Cloudflare:`, error);
+    }
+};
+
+const verifyCloudflareToken = async () => {
+    try {
+        const response = await axios.get('https://api.cloudflare.com/client/v4/user/tokens/verify', {
+            headers: {
+                'Authorization': `Bearer ${CLOUDFLARE_API_KEY}`,
+                'Content-Type': 'application/json',
+            },
+        });
+        isCloudflareTokenValid = response.data.success;
+    } catch (error) {
+        isCloudflareTokenValid = false;
+    }
+};
+
 const isMaliciousIP = (ipData) => {
     return ipData && (ipData.is_tor || ipData.is_proxy || ipData.is_anonymous);
 };
 
-const captchaRequired = (req) => {
+const logRequest = (req) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    return blocklist[ip] || false;
+    console.log(`Request from ${ip} | Method: ${req.method} | URL: ${req.url}`);
 };
+
+app.use(helmet());
 
 app.use(async (req, res, next) => {
     const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
 
     if (blocklist[ip] && (Date.now() - blocklist[ip]) < BLOCK_TIME) {
-        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+        return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
     }
 
     const ipData = await checkIPReputation(ip);
     if (isMaliciousIP(ipData)) {
         blocklist[ip] = Date.now();
-        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+        await blockIPCloudflare(ip);
+        return res.status(403).send('hina ng DDoS mo, bata HAHAHAHA');
     }
 
     IP_REQUEST_COUNT[ip] = (IP_REQUEST_COUNT[ip] || 0) + 1;
+
     if (IP_REQUEST_COUNT[ip] > MAX_REQUESTS) {
         blocklist[ip] = Date.now();
-        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+        await blockIPCloudflare(ip);
+        return res.status(429).send('hina ng DDoS mo, bata HAHAHAHA');
     }
 
     setTimeout(() => {
         IP_REQUEST_COUNT[ip]--;
     }, 60000);
 
-    if (captchaRequired(req)) {
-        return res.status(429).send('Please complete a CAPTCHA to continue.');
+    logRequest(req);
+    next();
+});
+
+app.get('/', async (req, res) => {
+    if (!isCloudflareTokenValid) {
+        await verifyCloudflareToken();
     }
 
-    next();
-});
-
-app.use((req, res, next) => {
-    const userAgent = req.headers['user-agent'];
-    const acceptHeader = req.headers['accept'];
-
-    if (!userAgent || !acceptHeader || !/^Mozilla|Chrome|Safari/.test(userAgent)) {
-        return res.status(400).send('Invalid request.');
+    if (!isCloudflareTokenValid) {
+        return res.status(403).send('Invalid Cloudflare API key.');
     }
 
-    res.setHeader('X-Content-Type-Options', 'nosniff');
-    res.setHeader('X-Frame-Options', 'DENY');
-    res.setHeader('Strict-Transport-Security', 'max-age=31536000; includeSubDomains');
-    res.setHeader('X-XSS-Protection', '1; mode=block');
-    res.setHeader('Referrer-Policy', 'no-referrer');
-    next();
+    res.send('hina ng DDoS mo bata HAHAHAHA');
 });
 
-app.use((req, res, next) => {
-    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
-    console.log(`Request from ${ip} | Method: ${req.method} | URL: ${req.url}`);
-    next();
+app.use((req, res) => {
+    res.status(404).send('Not found');
 });
 
-app.get('/', (req, res) => {
-    res.send('Protected API. Hina ng DDoS mo, bata HAHAHAHA');
-});
-
-app.listen(port, () => {
-    console.log(`Running on port ${port}`);
+app.listen(port, async () => {
+    await verifyCloudflareToken();
+    console.log(`API running on port ${port}`);
 });
