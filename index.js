@@ -6,19 +6,25 @@ const port = 3000;
 let blocklist = {};
 const BLOCK_TIME = 15 * 60 * 1000;
 const API_KEY = 'ea598429a1ea4d589669de66faa9db2c';
+const MAX_REQUESTS = 100;
+const IP_REQUEST_COUNT = {};
 
 const checkIPReputation = async (ip) => {
     try {
         const response = await axios.get(`https://api.ipgeolocation.io/ipgeo?apiKey=${API_KEY}&ip=${ip}`);
         return response.data;
     } catch (error) {
-        console.error('Error fetching IP reputation:', error.message);
         return null;
     }
 };
 
 const isMaliciousIP = (ipData) => {
     return ipData && (ipData.is_tor || ipData.is_proxy || ipData.is_anonymous);
+};
+
+const captchaRequired = (req) => {
+    const ip = req.headers['x-forwarded-for'] || req.connection.remoteAddress;
+    return blocklist[ip] || false;
 };
 
 app.use(async (req, res, next) => {
@@ -32,6 +38,20 @@ app.use(async (req, res, next) => {
     if (isMaliciousIP(ipData)) {
         blocklist[ip] = Date.now();
         return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+    }
+
+    IP_REQUEST_COUNT[ip] = (IP_REQUEST_COUNT[ip] || 0) + 1;
+    if (IP_REQUEST_COUNT[ip] > MAX_REQUESTS) {
+        blocklist[ip] = Date.now();
+        return res.status(403).send('Hina ng DDoS mo, bata HAHAHAHA');
+    }
+
+    setTimeout(() => {
+        IP_REQUEST_COUNT[ip]--;
+    }, 60000);
+
+    if (captchaRequired(req)) {
+        return res.status(429).send('Please complete a CAPTCHA to continue.');
     }
 
     next();
@@ -60,10 +80,9 @@ app.use((req, res, next) => {
 });
 
 app.get('/', (req, res) => {
-    res.send('hina ng DDoS mo, bata HAHAHAHA');
+    res.send('Protected API. Hina ng DDoS mo, bata HAHAHAHA');
 });
 
 app.listen(port, () => {
     console.log(`Running on port ${port}`);
 });
-
