@@ -104,11 +104,10 @@ const detectAndBanIP = async (req, res, next) => {
         return res.status(413).send('hina ng DDoS mo bata HAHAHAHA');
     }
 
-    if (req.headers.origin && req.headers.origin !== 'https://yourdomain.com') {
+    if (req.headers.origin && req.headers.origin !== 'https://anti-ddos-2by0.onrender.com') {
         return res.status(403).send('hina ng DDoS mo bata HAHAHAHA');
     }
-
-    // Validate request body for size and structure
+    
     if (req.body && Object.keys(req.body).length > 10) {
         return res.status(400).send('hina ng DDoS mo bata HAHAHAHA');
     }
