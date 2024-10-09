@@ -155,5 +155,5 @@ app.listen(port, async () => {
     if (!isCloudflareTokenValid) {
         console.error('Invalid Cloudflare API key.');
     }
-    console.log(`API running on port ${port}`);
+    console.log(`server is running on port ${port}`);
 });
